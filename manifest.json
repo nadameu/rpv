@@ -25,6 +25,7 @@
         "*://*/*/controlador.php?acao=oficio_requisitorio_requisicoes_editar&*",
         "*://*/*/controlador.php?acao=oficio_requisitorio_beneficiarioshonorarios_editar&*"
       ],
+      "all_frames": true,
       "css": [
         "estilos.css"
       ],
