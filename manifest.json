@@ -1,0 +1,37 @@
+{
+  "manifest_version": 2,
+  "name": "RPV",
+  "version": "1.0.0",
+  "description": "Ofício requisitório",
+  "applications": {
+    "gecko": {
+      "id": "rpv@nadameu.com.br"
+    }
+  },
+  "icons": {
+    "48": "icon.svg",
+    "96": "icon.svg"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://eproc.trf4.jus.br/eproc2trf4/*",
+        "https://eproc.jfpr.jus.br/eprocV2/*",
+        "https://eproc.jfrs.jus.br/eprocV2/*",
+        "https://eproc.jfsc.jus.br/eprocV2/*"
+      ],
+      "include_globs": [
+        "*://*/*/controlador.php?acao=oficio_requisitorio_requisicoes_cadastrar&*",
+        "*://*/*/controlador.php?acao=oficio_requisitorio_requisicoes_editar&*",
+        "*://*/*/controlador.php?acao=oficio_requisitorio_beneficiarioshonorarios_editar&*"
+      ],
+      "css": [
+        "estilos.css"
+      ],
+      "js": [
+        "Fracao.js",
+        "index.js"
+      ]
+    }
+  ]
+}

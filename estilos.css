@@ -1,0 +1,76 @@
+.gm-precalculo {
+  display: grid;
+  grid-template: "a a b" auto
+                 ". . ." 2em
+                 "c e g" auto
+                 "d f h" auto
+                 ". . ." 2em
+                 "j j k" auto
+                 "l l m" auto
+                 ". . ." 2em
+                 "i i i" auto
+                 ". . ." 2em
+                 "n n n" auto
+                 / auto;
+  grid-gap: 0 8px;
+  justify-content: left;
+}
+.gm-precalculo__campo_inteiro {
+  text-align: right;
+}
+.gm-precalculo__campo_moeda {
+  text-align: right;
+}
+.gm-precalculo__campo_obrigatorio, .gm-precalculo__campo_obrigatorio:focus {
+  background: #ffc;
+}
+.gm-precalculo__campo_calculado {
+  background: #cfc;
+}
+.gm-precalculo__campo_invalido, .gm-precalculo__campo_invalido:focus {
+  background: #fcc;
+}
+.gm-precalculo__qtd-beneficiarios-label {
+  grid-area: a;
+}
+.gm-precalculo__qtd-beneficiarios {
+  grid-area: b;
+}
+.gm-precalculo__principal-label {
+  grid-area: c;
+}
+.gm-precalculo__principal {
+  grid-area: d;
+}
+.gm-precalculo__juros-label {
+  grid-area: e;
+}
+.gm-precalculo__juros {
+  grid-area: f;
+}
+.gm-precalculo__total-label {
+  grid-area: g;
+}
+.gm-precalculo__total {
+  grid-area: h;
+}
+.gm-precalculo__beneficiarios {
+  grid-area: i;
+}
+.gm-precalculo__meses-anterior-label {
+  grid-area: j;
+}
+.gm-precalculo__meses-anterior {
+  grid-area: k;
+}
+.gm-precalculo__meses-corrente-label {
+  grid-area: l;
+}
+.gm-precalculo__meses-corrente {
+  grid-area: m;
+}
+.gm-precalculo__erros {
+  grid-area: n;
+  font-size: 1.1em;
+  color: red;
+}
