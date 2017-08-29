@@ -122,6 +122,103 @@ const inserirBotaoPrecalcular = (fieldset, formulario) => {
 	inserirApos(botao, fieldset);
 };
 
+const Stream = function(subscribe) {
+	if (! (this instanceof Stream)) return new Stream(subscribe);
+	this._subscribe = subscribe;
+};
+Stream.prototype = {
+	constructor: Stream,
+	forEach(f) {
+		return new Promise((resolve, reject) => {
+			this.subscribe({
+				next: x => f(x),
+				error: reject,
+				complete: resolve
+			});
+		});
+	},
+	map(f) {
+		return new Stream(({ next, error, complete }) => this.subscribe({
+			next: x => next(f(x)),
+			error,
+			complete
+		}));
+	},
+	subscribe(subscriber) {
+		const next = subscriber.next || (() => {});
+		const error = subscriber.error || (() => {});
+		const complete = subscriber.complete || (() => {});
+		const unsubscribe = this._subscribe({
+			next: x => next(x),
+			error: e => error(e),
+			complete: () => complete()
+		}) || (() => {});
+		return { unsubscribe };
+	}
+};
+Stream.fromEvent = (elt, type, capture) => new Stream(({ next, error }) => {
+	const handler = evt => {
+		try { next(evt); }
+		catch (e) { error(e); }
+	};
+	elt.addEventListener(type, handler, capture);
+	return () => elt.removeEventListener(type, handler, capture);
+});
+
+const Either = function() {};
+Either.prototype.map = function(f) { return this.cata({
+	Left: () => this,
+	Right: x => Right(f(x))
+}); };
+Either.prototype.toString = function() { return this.cata({
+	Left: x => `Left(${x})`,
+	Right: x => `Right(${x})`
+}); };
+
+const Left = function(x) {
+	if (! (this instanceof Left)) return new Left(x);
+	this._x = x;
+};
+Left.prototype = Object.create(Either.prototype);
+Left.prototype.constructor = Left;
+Left.prototype.cata = function(d) { return d.Left(this._x); };
+
+const Right = function(x) {
+	if (! (this instanceof Right)) return new Right(x);
+	this._x = x;
+};
+Right.prototype = Object.create(Either.prototype);
+Right.prototype.constructor = Right;
+Right.prototype.cata = function(d) { return d.Right(this._x); };
+
+Either.Left = Left;
+Either.Right = Right;
+
+const Maybe = function() {};
+Maybe.prototype.map = function(f) { return this.cata({
+	Nothing: () => this,
+	Just: x => Just(f(x))
+}); };
+Maybe.prototype.toString = function() { return this.cata({
+	Nothing: () => `Nothing`,
+	Just: x => `Just(${x})`
+}); };
+
+const Nothing = function() {
+	if (! (this instanceof Nothing)) return new Nothing();
+};
+Nothing.prototype = Object.create(Maybe.prototype);
+Nothing.prototype.constructor = Nothing;
+Nothing.prototype.cata = function(d) { return d.Nothing(); };
+
+const Just = function(x) {
+	if (! (this instanceof Just)) return new Just(x);
+	this._x = x;
+};
+Just.prototype = Object.create(Maybe.prototype);
+Just.prototype.constructor = Just;
+Just.prototype.cata = function(d) { return d.Just(this._x); };
+
 const inserirFormularioPreCalculoOculto = fieldset => {
 	const tempDiv = document.createElement('div');
 	tempDiv.innerHTML = [
@@ -166,130 +263,160 @@ const inserirFormularioPreCalculoOculto = fieldset => {
 	const beneficiarios = tempDiv.querySelector('.gm-precalculo__beneficiarios');
 	const erros = tempDiv.querySelector('.gm-precalculo__erros');
 
-	Array.from(tempDiv.querySelectorAll('.gm-precalculo__campo_inteiro')).forEach(elemento => elemento.addEventListener('input', () => {
-		const texto = elemento.value.replace(/\D/g, '');
-		if (texto === '') {
-			elemento.value = '';
-		} else {
-			const valor = Fracao.fromDecimalString(texto);
-			elemento.value = valor.toIntegerString();
-		}
-		validarCampos();
-	}));
-
-	Array.from(tempDiv.querySelectorAll('.gm-precalculo__campo_moeda')).forEach(elemento => elemento.addEventListener('input', () => {
-		const texto = elemento.value.replace(/\D/g, '');
-		const valor = Fracao.fromDecimalString(texto).map(x => x / 100);
-		if (valor.valueOf() === 0) {
-			elemento.value = '';
-		} else {
-			elemento.value = valor.toCurrencyString();
-		}
-		validarCampos();
-	}));
-
-	const atualizarBeneficiarios = () => {
-		const qtdBeneficiarios = Fracao.fromDecimalString(elementoQtdBeneficiarios.value || elementoQtdBeneficiarios.placeholder);
-		const camposBeneficiario = Array.from(document.querySelectorAll('.gm-precalculo__campo_beneficiario'));
-		const qtdBeneficiariosAtual = camposBeneficiario.length;
-		camposBeneficiario.slice(qtdBeneficiarios.valueOf()).forEach(campo => {
-			campo.removeEventListener('change', validarCampos);
-			campo.parentElement.removeChild(campo);
-		});
-		for (let i = qtdBeneficiariosAtual; i < qtdBeneficiarios.valueOf(); i++) {
-			beneficiarios.insertAdjacentHTML('beforeend', [
-				`<div class="gm-precalculo__campo_beneficiario">`,
-				`<label for="gmBeneficiario${i}" class="infraLabelObrigatorio gm-precalculo__label gm-precalculo__beneficiario-${i}-label">Beneficiário ${i + 1}:</label> `,
-				`<select id="gmBeneficiario${i}" class="gm-precalculo__beneficiario-${i} gm-precalculo__beneficiario gm-precalculo__campo gm-precalculo__campo_obrigatorio"></select>`,
-				`</div>`,
-			].join(''));
-			const beneficiario = document.querySelector(`.gm-precalculo__beneficiario-${i}`);
-			beneficiario.addEventListener('change', validarCampos);
-		}
-		const opcoes = [{
-			fracao: Fracao(1, 1),
-			value: '1/1',
-			textContent: 'Valor integral (100%)'
-		}];
-		for (let i = 1; i < qtdBeneficiarios.valueOf(); i++) {
-			const fracao = Fracao(i, qtdBeneficiarios.valueOf());
-			const value = fracao.toString();
-			const textContent = `${value} (${fracao.toPercentString()})`;
-			opcoes.push({ fracao, value, textContent });
-		}
-		opcoes.sort((a, b) => a.fracao.valueOf() - b.fracao.valueOf());
-		for (let i = 0; i < qtdBeneficiarios; i++) {
-			const beneficiario = document.querySelector(`.gm-precalculo__beneficiario-${i}`);
-			beneficiario.innerHTML = opcoes.map(({ value, textContent }) => `<option value="${value}">${textContent}</option>`).join('');
-			beneficiario.value = `1/${qtdBeneficiarios.valueOf()}`;
-		}
-		validarCampos();
-	};
-	elementoQtdBeneficiarios.addEventListener('input', atualizarBeneficiarios);
-
-	const validarCampos = () => {
-		const mensagens = [];
-		const valorPrincipal = Fracao.fromDecimalString(principal.value || total.value || '0');
-		if (principal.value === '') {
-			principal.placeholder = valorPrincipal.toCurrencyString();
-		}
-		const valorTotal = Fracao.fromDecimalString(total.value || principal.value || '0');
-		if (total.value === '') {
-			total.placeholder = valorTotal.toCurrencyString();
-		}
-		const valorJuros = menos(valorTotal, valorPrincipal);
-		valorJuros.chain(j => {
-			if (j < 0) {
-				juros.value = 'ERRO';
-				juros.classList.add('gm-precalculo__campo_invalido');
-				mensagens.push('Valor total não pode ser menor que principal.');
-			} else {
-				juros.classList.remove('gm-precalculo__campo_invalido');
-				juros.value = valorJuros.toCurrencyString();
-			}
-		});
-		const qtdMesesAnterior = Fracao.fromDecimalString(mesesAnterior.value || mesesAnterior.placeholder);
-		const qtdMesesCorrente = Fracao.fromDecimalString(mesesCorrente.value || mesesCorrente.placeholder);
-		qtdMesesCorrente.chain(meses => {
-			if (meses > 13) {
-				mesesCorrente.classList.add('gm-precalculo__campo_invalido');
-				mensagens.push(`Ano corrente não pode ter ${meses} meses.`);
-			} else {
-				mesesCorrente.classList.remove('gm-precalculo__campo_invalido');
-			}
-		});
-
-		const qtdBeneficiarios = Fracao.fromDecimalString(elementoQtdBeneficiarios.value || elementoQtdBeneficiarios.placeholder);
-		qtdBeneficiarios.chain(qtd => {
-			if (qtd < 1) {
-				elementoQtdBeneficiarios.classList.add('gm-precalculo__campo_invalido');
-				mensagens.push('É preciso ao menos um beneficiário.');
-			} else {
-				elementoQtdBeneficiarios.classList.remove('gm-precalculo__campo_invalido');
-
-				const camposBeneficiario = Array.from(document.querySelectorAll('.gm-precalculo__beneficiario'));
-				const somaFracoes = soma(...camposBeneficiario.map(beneficiario => {
-					const [num, den] = beneficiario.value.split('/').map(Number);
-					return Fracao(num, den);
-				}));
-				if (+somaFracoes !== 1) {
-					camposBeneficiario.forEach(campo => {
-						campo.classList.add('gm-precalculo__campo_invalido');
+	const [principal$, juros$, total$] = [principal, juros, total].map(elt => {
+		Stream.fromEvent(elt, 'input')
+			.map(evt => {
+				const texto = elt.value.replace(/[.,]/g, '');
+				if (! /^\d*$/.test(texto)) return Left(`${elt.value} não é um número válido`);
+				if (texto === '') return Right(Nothing());
+				const textoDecimal = [`000${texto}`]
+					.map(txt => [txt.substr(0, txt.length - 2), txt.substr(-2)])
+					.join(',');
+				const fracao = Fracao.fromDecimalString(textoDecimal);
+				if (fracao.equals(Fracao.of(0))) return Right(Nothing());
+				console.log(fracao);
+				return Right(Just(fracao));
+			})
+			.forEach(either => {
+				console.log('either is %s', either);
+				either.map(maybe => {
+					maybe.cata({
+						Nothing: () => { elt.value = ''; },
+						Just: fracao => { elt.value = fracao.toCurrencyString(); }
 					});
-					mensagens.push('Soma da porcentagem dos beneficiários deve atingir 100%. Atual: ' + somaFracoes.toPercentString());
-				} else {
-					camposBeneficiario.forEach(campo => {
-						campo.classList.remove('gm-precalculo__campo_invalido');
-					});
-				}
-			}
-		});
+				});
+			})
+			.then(
+				x => console.log('done', x),
+				err => console.error('error', err)
+			);
+	});
 
-		erros.innerHTML = mensagens.join('<br>');
-	};
+	// Array.from(tempDiv.querySelectorAll('.gm-precalculo__campo_inteiro')).forEach(elemento => elemento.addEventListener('input', () => {
+	// 	const texto = elemento.value.replace(/\D/g, '');
+	// 	if (texto === '') {
+	// 		elemento.value = '';
+	// 	} else {
+	// 		const valor = Fracao.fromDecimalString(texto);
+	// 		elemento.value = valor.toIntegerString();
+	// 	}
+	// 	validarCampos();
+	// }));
+
+	// Array.from(tempDiv.querySelectorAll('.gm-precalculo__campo_moeda')).forEach(elemento => elemento.addEventListener('input', () => {
+	// 	const texto = elemento.value.replace(/\D/g, '');
+	// 	const valor = Fracao.fromDecimalString(texto).map(x => x / 100);
+	// 	if (valor.valueOf() === 0) {
+	// 		elemento.value = '';
+	// 	} else {
+	// 		elemento.value = valor.toCurrencyString();
+	// 	}
+	// 	validarCampos();
+	// }));
+
+	// const atualizarBeneficiarios = () => {
+	// 	const qtdBeneficiarios = Fracao.fromDecimalString(elementoQtdBeneficiarios.value || elementoQtdBeneficiarios.placeholder);
+	// 	const camposBeneficiario = Array.from(document.querySelectorAll('.gm-precalculo__campo_beneficiario'));
+	// 	const qtdBeneficiariosAtual = camposBeneficiario.length;
+	// 	camposBeneficiario.slice(qtdBeneficiarios.valueOf()).forEach(campo => {
+	// 		campo.removeEventListener('change', validarCampos);
+	// 		campo.parentElement.removeChild(campo);
+	// 	});
+	// 	for (let i = qtdBeneficiariosAtual; i < qtdBeneficiarios.valueOf(); i++) {
+	// 		beneficiarios.insertAdjacentHTML('beforeend', [
+	// 			`<div class="gm-precalculo__campo_beneficiario">`,
+	// 			`<label for="gmBeneficiario${i}" class="infraLabelObrigatorio gm-precalculo__label gm-precalculo__beneficiario-${i}-label">Beneficiário ${i + 1}:</label> `,
+	// 			`<select id="gmBeneficiario${i}" class="gm-precalculo__beneficiario-${i} gm-precalculo__beneficiario gm-precalculo__campo gm-precalculo__campo_obrigatorio"></select>`,
+	// 			`</div>`,
+	// 		].join(''));
+	// 		const beneficiario = document.querySelector(`.gm-precalculo__beneficiario-${i}`);
+	// 		beneficiario.addEventListener('change', validarCampos);
+	// 	}
+	// 	const opcoes = [{
+	// 		fracao: Fracao(1, 1),
+	// 		value: '1/1',
+	// 		textContent: 'Valor integral (100%)'
+	// 	}];
+	// 	for (let i = 1; i < qtdBeneficiarios.valueOf(); i++) {
+	// 		const fracao = Fracao(i, qtdBeneficiarios.valueOf());
+	// 		const value = fracao.toString();
+	// 		const textContent = `${value} (${fracao.toPercentString()})`;
+	// 		opcoes.push({ fracao, value, textContent });
+	// 	}
+	// 	opcoes.sort((a, b) => a.fracao.valueOf() - b.fracao.valueOf());
+	// 	for (let i = 0; i < qtdBeneficiarios; i++) {
+	// 		const beneficiario = document.querySelector(`.gm-precalculo__beneficiario-${i}`);
+	// 		beneficiario.innerHTML = opcoes.map(({ value, textContent }) => `<option value="${value}">${textContent}</option>`).join('');
+	// 		beneficiario.value = `1/${qtdBeneficiarios.valueOf()}`;
+	// 	}
+	// 	validarCampos();
+	// };
+	// elementoQtdBeneficiarios.addEventListener('input', atualizarBeneficiarios);
+
+	// const validarCampos = () => {
+	// 	const mensagens = [];
+	// 	const valorPrincipal = Fracao.fromDecimalString(principal.value || total.value || '0');
+	// 	if (principal.value === '') {
+	// 		principal.placeholder = valorPrincipal.toCurrencyString();
+	// 	}
+	// 	const valorTotal = Fracao.fromDecimalString(total.value || principal.value || '0');
+	// 	if (total.value === '') {
+	// 		total.placeholder = valorTotal.toCurrencyString();
+	// 	}
+	// 	const valorJuros = menos(valorTotal, valorPrincipal);
+	// 	valorJuros.chain(j => {
+	// 		if (j < 0) {
+	// 			juros.value = 'ERRO';
+	// 			juros.classList.add('gm-precalculo__campo_invalido');
+	// 			mensagens.push('Valor total não pode ser menor que principal.');
+	// 		} else {
+	// 			juros.classList.remove('gm-precalculo__campo_invalido');
+	// 			juros.value = valorJuros.toCurrencyString();
+	// 		}
+	// 	});
+	// 	const qtdMesesAnterior = Fracao.fromDecimalString(mesesAnterior.value || mesesAnterior.placeholder);
+	// 	const qtdMesesCorrente = Fracao.fromDecimalString(mesesCorrente.value || mesesCorrente.placeholder);
+	// 	qtdMesesCorrente.chain(meses => {
+	// 		if (meses > 13) {
+	// 			mesesCorrente.classList.add('gm-precalculo__campo_invalido');
+	// 			mensagens.push(`Ano corrente não pode ter ${meses} meses.`);
+	// 		} else {
+	// 			mesesCorrente.classList.remove('gm-precalculo__campo_invalido');
+	// 		}
+	// 	});
+
+	// 	const qtdBeneficiarios = Fracao.fromDecimalString(elementoQtdBeneficiarios.value || elementoQtdBeneficiarios.placeholder);
+	// 	qtdBeneficiarios.chain(qtd => {
+	// 		if (qtd < 1) {
+	// 			elementoQtdBeneficiarios.classList.add('gm-precalculo__campo_invalido');
+	// 			mensagens.push('É preciso ao menos um beneficiário.');
+	// 		} else {
+	// 			elementoQtdBeneficiarios.classList.remove('gm-precalculo__campo_invalido');
+
+	// 			const camposBeneficiario = Array.from(document.querySelectorAll('.gm-precalculo__beneficiario'));
+	// 			const somaFracoes = soma(...camposBeneficiario.map(beneficiario => {
+	// 				const [num, den] = beneficiario.value.split('/').map(Number);
+	// 				return Fracao(num, den);
+	// 			}));
+	// 			if (+somaFracoes !== 1) {
+	// 				camposBeneficiario.forEach(campo => {
+	// 					campo.classList.add('gm-precalculo__campo_invalido');
+	// 				});
+	// 				mensagens.push('Soma da porcentagem dos beneficiários deve atingir 100%. Atual: ' + somaFracoes.toPercentString());
+	// 			} else {
+	// 				camposBeneficiario.forEach(campo => {
+	// 					campo.classList.remove('gm-precalculo__campo_invalido');
+	// 				});
+	// 			}
+	// 		}
+	// 	});
+
+	// 	erros.innerHTML = mensagens.join('<br>');
+	// };
+
 	inserirApos(formulario, fieldset);
-	atualizarBeneficiarios();
-	validarCampos();
+	// atualizarBeneficiarios();
+	// validarCampos();
 	return formulario;
 };
 
